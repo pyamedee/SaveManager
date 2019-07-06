@@ -1,0 +1,3 @@
+Ctrl + Alt + d : remove a save file
+Enter : import a save file
+F2 : rename a save file
