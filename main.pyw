@@ -1,13 +1,13 @@
 # -*- coding:Utf-8 -*-
 
-import tkinter as tk
-from tkinter import font as tkFont
-from tkinter import ttk
-from configparser import ConfigParser
 import os
+import tkinter as tk
+import tkinter.font
+from configparser import ConfigParser
 from glob import iglob
-from shutil import copyfile
-from time import perf_counter
+from shutil import copyfile, rmtree
+from tkinter import ttk
+from tkinter.messagebox import askokcancel
 
 
 def read_configs():
@@ -35,21 +35,24 @@ class App(tk.Tk):
 
         style = ttk.Style()
         ttk.Style().configure('B.TButton', foreground='black', justify='left', font=default_font)
-        ttk.Style().configure('FOCUS.TButton', foreground='black', justify='left', font=('Consolas', 8, 'bold'))
+        ttk.Style().configure('FOCUS.TButton', foreground='#100000', justify='left', font=('Consolas', 8, 'bold italic'))
         self.car_width = self.font1.measure(' ')
 
         ttk.Style().configure('G.TLabel', foreground='#009000', justify='left', font=('Consolas', 9, 'italic'))
         ttk.Style().configure('R.TLabel', foreground='red', justify='left', font=('Consolas', 9, 'italic'))
 
     def destroy_profile(self):
-        root.unbind('<FocusIn>')
+        self.unbind('<FocusIn>')
         self.current_profile.destroy()
         self.current_profile = None
+
         self.create_change_profile_menu()
+        self.bind('<FocusIn>', self.change_profile_menu.focus2entry)
 
     def create_profile_window(self):
+        self.unbind('<FocusIn>')
         self.current_profile = self.Profile(self, self.cfg)
-        root.bind('<FocusIn>', self.current_profile.focus2entry)
+        self.bind('<FocusIn>', self.current_profile.focus2entry)
 
     def create_change_profile_menu(self):
         self.change_profile_menu = self.ChangeProfileMenu(self, self.cfg)
@@ -64,27 +67,53 @@ class App(tk.Tk):
 
         self.create_profile_window()
 
+    def remove_former_profiles(self):
+        response = askokcancel('Clean former profiles', 'Are you sure you want to delete the backups of deleted profiles?')
+        if response:
+            for former_profile_path in iglob(self.cfg['Main']['ds_path'] + '\\*.formerprofile'):
+                rmtree(former_profile_path)
+
 
     class ChangeProfileMenu(tk.Frame):
         def __init__(self, root, cfg, *args, **kwargs):
             super().__init__(root, *args, **kwargs)
             self.pack(fill='both', expand=True)
 
+            self.state = 'default'
             self.root = root
 
             self.profiles = dict()
             self.ds_path = os.path.normpath(cfg['Main']['ds_path'])
             for i, profile_path in enumerate(iglob(self.ds_path + '\\*.profile')):
+                i += 1
                 profile_name = profile_path.split('\\')[-1]
                 profile_name = profile_name.replace('.profile', '')
                 button = ttk.Button(self, command=self.define_callback(profile_name), text=profile_name, style='B.TButton')
-                button.grid(row=i, column=0)
+                button.grid(row=i, column=0, sticky='w')
                 self.profiles[profile_name] = button
 
-            measuring, ref = self.adjust()
-            for key, button in self.profiles.items():
-                button['text'] = key + ((ref - measuring[key]) // self.root.car_width + 1) * ' '
+            self.entry = tk.Entry(self, width=28)
+            self.entry.grid(row=i + 1, column=0)
+            self.entry.focus_set()
+            self.entry.bind('<Return>', self.new_profile)
+            self.entry.bind('<F2>', self.activate_renaming_state)
+            self.entry.bind('<Control-w>', self.activate_deleting_state)
 
+            self.adjust()
+
+        def focus2entry(self, _=None):
+            self.entry.focus_set()
+
+        def activate_renaming_state(self, _=None):
+            self.state = 'renaming'
+
+        def activate_deleting_state(self, _=None):
+            self.state = 'deleting'
+
+        def new_profile(self, _=None):
+            name = self.entry.get()
+            if name:
+                self.activate(name)
 
         def adjust(self):
             ref = 0
@@ -96,7 +125,9 @@ class App(tk.Tk):
                 measure = font.measure(key)
                 ref = max(measure, ref)
                 measuring[key] = measure
-            return measuring, ref
+
+            for key, button in self.profiles.items():
+                button['text'] = key + ((ref - measuring[key]) // self.root.car_width + 1) * ' '
 
         def define_callback(self, name):
             def callback():
@@ -104,7 +135,46 @@ class App(tk.Tk):
             return callback
 
         def activate(self, name):
+            if self.state == 'default':
+                self.change_to_profile(name)
+            elif self.state == 'renaming':
+                self.state = 'default'
+                new_name = self.entry.get()
+                if new_name:
+                    button = self.profiles[name]
+                    button['text'] = new_name
+                    button['command'] = self.define_callback(new_name)
+                    os.rename(self.ds_path + '\\' + name + '.profile', self.ds_path + '\\' + new_name + '.profile')
+                    self.profiles.pop(name)
+                    self.profiles[new_name] = button
+                    self.adjust()
+                    self.entry.delete(0, 'end')
+            elif self.state == 'deleting':
+                self.state = 'default'
+                self.profiles.pop(name)
+
+                didit = False
+                to_add = ''
+                while not didit:
+                    try:
+                        os.rename(self.ds_path + f'\\{name}.profile', self.ds_path + f'\\{name}{to_add}.formerprofile')
+                    except FileExistsError:
+                        to_add += "'"
+                    else:
+                        didit = True
+                self.reinit_widgets()
+
+        def change_to_profile(self, name):
             self.root.change_to_profile(name + '.profile')
+
+        def reinit_widgets(self):
+            for i, (key, value) in enumerate(self.profiles.items()):
+                i += 1
+                value.grid_forget()
+                value.grid(row=i, column=0, sticky='w')
+
+            self.entry.grid_forget()
+            self.entry.grid(row=i + 1, column=0)
 
     class Profile(tk.Frame):
 
@@ -119,7 +189,7 @@ class App(tk.Tk):
             self.sorting_type = cfg['Main']['sorting_type']
             self.auto_renumber = cfg['Main'].getboolean('automatically_renumber')
 
-            self.reorganisation_focus = ''
+            self.reorganization_focus = ''
 
             self.ds_path = os.path.normpath(cfg['Main']['ds_path'])
             self.saves_path = os.path.normpath(self.ds_path + '\\' + cfg['Main']['profile'])
@@ -193,6 +263,11 @@ class App(tk.Tk):
             self.menu2.add_command(label='Renumber the saves', command=self.renumber_the_saves)
             self.menu2.add_command(label='Reorganise', command=self.activate_reorganising_state, accelerator='Ctrl-Alt-r')
 
+            self.menu3 = tk.Menu(self.menubar, tearoff=0)
+            self.menubar.add_cascade(label='Profile', menu=self.menu3)
+            self.menu3.add_command(label='Change profile', command=self.destroy_, accelerator='Delete')
+            self.menu3.add_command(label='Clean former profiles', command=self.root.remove_former_profiles)
+
             self.root.configure(menu=self.menubar)
 
             if self.sorting_type != 'default':
@@ -206,7 +281,7 @@ class App(tk.Tk):
             length = len(str(len(self.buttons)))
             for i, (key, value) in enumerate(self.buttons.items()):
                 i += 1
-                button_name = '0' * (length - len(str(i))) + str(i) + ' ' + key
+                button_name = '{:0>{}} '.format(i, length) + key
                 new_dict[button_name] = value
                 value['text'] = button_name
                 value['command'] = self.define_callback(button_name)
@@ -226,8 +301,7 @@ class App(tk.Tk):
                         reversed_key = key
                 except ValueError:
                     reversed_key = key
-
-                button_name = '0' * (length - len(str(i))) + str(i) + ' ' + reversed_key
+                button_name = '{:0>{}} '.format(i, length) + reversed_key
                 new_dict[button_name] = value
                 value['text'] = button_name
                 value['command'] = self.define_callback(button_name)
@@ -328,9 +402,9 @@ class App(tk.Tk):
             elif self.state == 'renaming':
                 self.rename_save(name)
             elif self.state == 'reorganising':
-                if self.reorganisation_focus:
-                    self.buttons[self.reorganisation_focus]['style'] = 'B.TButton'
-                self.reorganisation_focus = name
+                if self.reorganization_focus:
+                    self.buttons[self.reorganization_focus]['style'] = 'B.TButton'
+                self.reorganization_focus = name
                 self.focus_message()
             else:
                 self.txt_var.set(f'save "{name}" has been loaded')
@@ -338,14 +412,14 @@ class App(tk.Tk):
                 copyfile(self.saves_path + f'\\{name}.sl2', self.ds_path + '\\DS30000.sl2')
 
         def focus_message(self):
-            self.txt_var.set('focus is currently to "' + self.reorganisation_focus + '"')
-            self.buttons[self.reorganisation_focus]['style'] = 'FOCUS.TButton'
+            self.txt_var.set('focus is currently to "' + self.reorganization_focus + '"')
+            self.buttons[self.reorganization_focus]['style'] = 'FOCUS.TButton'
 
         def _move_save(self, indicator):
-            if self.reorganisation_focus:
+            if self.reorganization_focus:
                 new_dict = dict()
 
-                name = self.reorganisation_focus
+                name = self.reorganization_focus
                 str_number, without_number_name = name.split(' ', 1)
                 number = int(str_number)
                 new_number = number + indicator
@@ -372,7 +446,7 @@ class App(tk.Tk):
                         elif str_number2 != str_number:
                             new_dict[key] = value
 
-                    self.reorganisation_focus = new_name
+                    self.reorganization_focus = new_name
                     self.buttons = new_dict
                     self.focus_message()
                     self.reinit_widgets()
@@ -384,13 +458,11 @@ class App(tk.Tk):
             self._move_save(1)
 
         def stop_reorganising(self, _=None):
-            if self.reorganisation_focus:
-                self.buttons[self.reorganisation_focus]['style'] = 'B.TButton'
-                self.reorganisation_focus = ''
-                self.state = 'default'
-                self.txt_var.set('')
-            if self.state == 'reorganising':
-                self.state = 'default'
+            self.state = 'default'
+            self.txt_var.set('')
+            if self.reorganization_focus:
+                self.buttons[self.reorganization_focus]['style'] = 'B.TButton'
+                self.reorganization_focus = ''
                 self.txt_var.set('')
 
         def delete_save(self, name):
@@ -465,4 +537,3 @@ if __name__ == "__main__":
     root = App(cfg)
     root.create_profile_window()
     root.mainloop()
-
