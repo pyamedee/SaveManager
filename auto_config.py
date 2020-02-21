@@ -19,14 +19,18 @@ def main():
                 dir_list.pop(i)
 
         if len(dir_list) == 1:
-            directory = os.path.join(darksouls3, dir_list[0])
+            ds3_directory = os.path.join(darksouls3, dir_list[0])
         else:
-            directory = askdirectory(initialdir=darksouls3, title='Please select the save file directory')
+            ds3_directory = askdirectory(initialdir=darksouls3, title='Please select the ds3 save file directory')
+
+        ds1_directory = askdirectory(initialdir=os.path.normpath(os.environ['userprofile']), title='Please select the ds1 save file directory')
 
         cfg = ConfigParser()
         cfg['Main'] = {
-            'ds_path': directory,
-            'profile': 'save_manager.profile',
+            'ds3_path': ds3_directory,
+            'ds1_path': ds1_directory,
+            'game' : 'ds1',
+            'profile': 'initial_profile.profile',
             'sorting_type': 'alphabetical',
             'automatically_renumber': 'true'
         }
@@ -35,7 +39,7 @@ def main():
             cfg.write(configfile)
 
         return input('Done.\n')
-        
+        next
     elif response != 'no' and response != 'n':
         print('Response not understood, interpreted as "No".')
     return input('Press Enter to quit.')

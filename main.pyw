@@ -21,10 +21,15 @@ class App(tk.Tk):
 
     def __init__(self, cfg, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        
         self.cfg = cfg
         self.current_profile = None
         self.change_profile_menu = None
+
+        self.game = cfg['Main']['game']
+
+        self.title('Save Manager ' + self.game)
+        self.iconbitmap(r'.\icon.ico')
 
         default_font = tk.font.Font(
             family='Consolas',
@@ -83,7 +88,13 @@ class App(tk.Tk):
             self.root = root
 
             self.profiles = dict()
-            self.ds_path = os.path.normpath(cfg['Main']['ds_path'])
+
+            game = self.root.game
+            if game == 'ds1':
+                self.ds_path = os.path.normpath(cfg['Main']['ds1_path'])
+            elif game == 'ds3':
+                self.ds_path = os.path.normpath(cfg['Main']['ds3_path'])
+
             for i, profile_path in enumerate(iglob(self.ds_path + '\\*.profile')):
                 i += 1
                 profile_name = profile_path.split('\\')[-1]
@@ -182,16 +193,22 @@ class App(tk.Tk):
             super().__init__(root, *args, **kwargs)
             self.pack(fill='both', expand=True)
 
-            root.title('Save Manager')
-            root.iconbitmap(r'.\icon.ico')
             self.root = root
+
+            game = self.root.game
+            self.game = game
+            self.base_save_name = {'ds1': 'DRAKS0005', 'ds3': 'DS30000'}[game]
 
             self.sorting_type = cfg['Main']['sorting_type']
             self.auto_renumber = cfg['Main'].getboolean('automatically_renumber')
 
             self.reorganization_focus = ''
+            
+            if game == 'ds1':
+                self.ds_path = os.path.normpath(cfg['Main']['ds1_path'])
+            elif game == 'ds3':
+                self.ds_path = os.path.normpath(cfg['Main']['ds3_path'])
 
-            self.ds_path = os.path.normpath(cfg['Main']['ds_path'])
             self.saves_path = os.path.normpath(self.ds_path + '\\' + cfg['Main']['profile'])
             if not os.path.exists(self.saves_path):
                 os.mkdir(self.saves_path)
@@ -255,6 +272,12 @@ class App(tk.Tk):
             self.menu1.add_command(label='Import', command=self.import_save, accelerator='Enter')
             self.menu1.add_command(label='Delete', command=self.deleting_state, accelerator='Ctrl+w')
             self.menu1.add_command(label='Rename', command=self.activate_renaming_state, accelerator='F2')
+            self.game_switching_menu = tk.Menu(self.menu1, tearoff=0)
+            self.menu1.add_cascade(label='Switch the game', menu=self.game_switching_menu)
+            if self.game == 'ds3':
+                self.game_switching_menu.add_command(label='Dark souls 1', command=lambda: self.switch_to('ds1'))
+            elif self.game == 'ds1':
+                self.game_switching_menu.add_command(label='Dark souls 3', command=lambda: self.switch_to('ds3'))
 
             self.menu2 = tk.Menu(self.menubar, tearoff=0)
             self.menubar.add_cascade(label='Organise', menu=self.menu2)
@@ -409,7 +432,7 @@ class App(tk.Tk):
             else:
                 self.txt_var.set(f'save "{name}" has been loaded')
                 self.label['style'] = 'G.TLabel'
-                copyfile(self.saves_path + f'\\{name}.sl2', self.ds_path + '\\DS30000.sl2')
+                copyfile(self.saves_path + f'\\{name}.sl2', self.ds_path + '\\' + self.base_save_name + '.sl2')
 
         def focus_message(self):
             self.txt_var.set('focus is currently to "' + self.reorganization_focus + '"')
@@ -529,8 +552,15 @@ class App(tk.Tk):
                 self.reinit_widgets()
 
         def _import_save(self, asname):
-            copyfile(self.ds_path + '\\DS30000.sl2', self.saves_path + f'\\{asname}.sl2')
-
+            copyfile(self.ds_path + '\\' + self.base_save_name + '.sl2', self.saves_path + f'\\{asname}.sl2')
+        
+        def switch_to(self, game):
+            cfg = self.root.cfg
+            cfg['Main']['game'] = game
+            with open('config.ini', 'w', encoding='utf8') as configfile:
+                cfg.write(configfile)
+            os.system('launcher.cmd')
+            self.root.destroy()
 
 if __name__ == "__main__":
     cfg = read_configs()
