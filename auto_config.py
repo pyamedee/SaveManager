@@ -39,7 +39,6 @@ def main():
             cfg.write(configfile)
 
         return input('Done.\n')
-        next
     elif response != 'no' and response != 'n':
         print('Response not understood, interpreted as "No".')
     return input('Press Enter to quit.')

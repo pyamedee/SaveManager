@@ -557,6 +557,7 @@ class App(tk.Tk):
         def switch_to(self, game):
             cfg = self.root.cfg
             cfg['Main']['game'] = game
+            cfg['Main']['profile'] = 'no profile'
             with open('config.ini', 'w', encoding='utf8') as configfile:
                 cfg.write(configfile)
             os.system('launcher.cmd')
@@ -565,5 +566,8 @@ class App(tk.Tk):
 if __name__ == "__main__":
     cfg = read_configs()
     root = App(cfg)
-    root.create_profile_window()
+    if cfg['Main']['profile'] != 'no profile':
+        root.create_profile_window()
+    else:
+        root.create_change_profile_menu()
     root.mainloop()

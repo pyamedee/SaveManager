@@ -1,3 +1,6 @@
-__pycache__/
+venv/
 .idea/
-/config.ini
+.vs/
+.vscode/
+*.pyc
+*.wpr

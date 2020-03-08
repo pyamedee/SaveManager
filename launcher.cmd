@@ -1,2 +1,1 @@
-@echo off
-start %~dp0\main.pyw
+start pythonw ".\main2.py"
